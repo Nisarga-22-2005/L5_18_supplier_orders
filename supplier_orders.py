@@ -1,44 +1,75 @@
-import os
+"""Track supplier purchase orders."""
 import sqlite3
 
-conn = sqlite3.connect(":memory:")
-conn.execute("CREATE TABLE orders (id INTEGER PRIMARY KEY, supplier TEXT, item TEXT, quantity INTEGER, received INTEGER)")
-order_total = 0
+
+def create_connection():
+    """Create an in-memory database and orders table."""
+    connection = sqlite3.connect(":memory:")
+    connection.execute(
+        "CREATE TABLE orders ("
+        "id INTEGER PRIMARY KEY, "
+        "supplier TEXT, "
+        "item TEXT, "
+        "quantity INTEGER, "
+        "received INTEGER)"
+    )
+    return connection
 
 
-def placeOrder(conn, supplier, item, quantity):
-    global order_total
-    conn.execute("INSERT INTO orders (supplier, item, quantity, received) VALUES ('%s', '%s', %d, 0)" % (supplier, item, quantity))
-    order_total+=quantity
-    return order_total
+def place_order(connection, supplier, item, quantity, order_total):
+    """Place an order and return the updated total quantity."""
+    connection.execute(
+        "INSERT INTO orders (supplier, item, quantity, received) "
+        "VALUES (?, ?, ?, 0)",
+        (supplier, item, quantity),
+    )
+    return order_total + quantity
 
 
-def markReceived(conn, order_id, remarks):
-    conn.execute("UPDATE orders SET received = 1 WHERE id = ?", (order_id,))
+def mark_received(connection, order_id):
+    """Mark an order as received."""
+    connection.execute(
+        "UPDATE orders SET received = 1 WHERE id = ?",
+        (order_id,),
+    )
 
 
-def notifyWarehouse(supplier):
-    os.system("echo notifying warehouse about " + supplier)
+def notify_warehouse(supplier):
+    """Notify the warehouse without executing a shell command."""
+    print(f"Notifying warehouse about {supplier}")
 
 
-def cleanup(conn):
-    try:
-        conn.execute("DELETE FROM orders WHERE received = 1")
-    except Exception:
-        pass
+def cleanup(connection):
+    """Delete orders that have been received."""
+    connection.execute("DELETE FROM orders WHERE received = 1")
 
 
-def pendingCount(conn):
-    return conn.execute("SELECT COUNT(*) FROM orders WHERE received = 0").fetchone()[0]
+def pending_count(connection):
+    """Return the number of orders that are still pending."""
+    cursor = connection.execute(
+        "SELECT COUNT(*) FROM orders WHERE received = 0"
+    )
+    return cursor.fetchone()[0]
 
 
 def main():
-    placeOrder(conn, "Acme Steel", "rods", 40)
-    placeOrder(conn, "Bolt Co", "bolts", 500)
-    markReceived(conn, 1, "ok")
-    notifyWarehouse("Acme")
-    print(pendingCount(conn), order_total)
-    cleanup(conn)
+    """Run the supplier order tracking example."""
+    connection = create_connection()
+    order_total = 0
+
+    order_total = place_order(
+        connection, "Acme Steel", "rods", 40, order_total
+    )
+    order_total = place_order(
+        connection, "Bolt Co", "bolts", 500, order_total
+    )
+
+    mark_received(connection, 1)
+    notify_warehouse("Acme")
+    print(pending_count(connection), order_total)
+    cleanup(connection)
+    connection.close()
 
 
-main()
+if __name__ == "__main__":
+    main()
